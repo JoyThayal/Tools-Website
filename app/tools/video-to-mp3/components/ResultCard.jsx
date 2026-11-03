@@ -1,8 +1,9 @@
 "use client";
 
 import { CheckCircle2, Download } from "lucide-react";
+import AudioTrimmer from "./AudioTrimmer";
 
-export default function ResultCard({ audioUrl, fileName, onReset }) {
+export default function ResultCard({ audioUrl, fileName, onReset, ffmpegRef }) {
   const downloadName = `${fileName ? fileName.replace(/\.[^/.]+$/, "") : "audio"}.mp3`;
 
   return (
@@ -34,8 +35,15 @@ export default function ResultCard({ audioUrl, fileName, onReset }) {
         className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg shadow-emerald-500/20"
       >
         <Download className="w-4 h-4" />
-        <span>Download MP3</span>
+        <span>Download Full MP3</span>
       </a>
+
+      {/* MP3 হয়ে যাওয়ার পর নিচে আসবে এই ট্রিমার অপশন */}
+      <AudioTrimmer
+        audioUrl={audioUrl}
+        fileName={fileName}
+        ffmpegRef={ffmpegRef}
+      />
     </div>
   );
 }

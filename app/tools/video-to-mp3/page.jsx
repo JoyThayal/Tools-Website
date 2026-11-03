@@ -23,7 +23,6 @@ export default function VideoToMp3Page() {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
 
-  // শুরুতে null থাকবে যাতে Node.js সার্ভার বিল্ডের সময় ক্র্যাশ না করে
   const ffmpegRef = useRef(null);
 
   const handleFileSelect = (file) => {
@@ -45,13 +44,10 @@ export default function VideoToMp3Page() {
   };
 
   const loadFFmpeg = async () => {
-    // শুধু ব্রাউজারেই ডাইনামিকালি লাইব্রেরি লোড হবে
     const { FFmpeg } = await import("@ffmpeg/ffmpeg");
     const { toBlobURL } = await import("@ffmpeg/util");
 
-    if (!ffmpegRef.current) {
-      ffmpegRef.current = new FFmpeg();
-    }
+    if (!ffmpegRef.current) ffmpegRef.current = new FFmpeg();
 
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("progress", ({ progress }) => {
@@ -78,9 +74,7 @@ export default function VideoToMp3Page() {
     setStatusText("Starting conversion...");
 
     try {
-      if (!loaded || !ffmpegRef.current) {
-        await loadFFmpeg();
-      }
+      if (!loaded || !ffmpegRef.current) await loadFFmpeg();
 
       const { fetchFile } = await import("@ffmpeg/util");
       const ffmpeg = ffmpegRef.current;
@@ -179,6 +173,7 @@ export default function VideoToMp3Page() {
             audioUrl={audioUrl}
             fileName={videoFile?.name}
             onReset={resetAll}
+            ffmpegRef={ffmpegRef}
           />
         )}
 
