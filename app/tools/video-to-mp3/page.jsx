@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
   Sparkles,
   Music,
@@ -15,6 +13,8 @@ import Dropzone from "./components/Dropzone";
 import FileCard from "./components/FileCard";
 import ResultCard from "./components/ResultCard";
 
+export const dynamic = "force-dynamic";
+
 export default function VideoToMp3Page() {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,7 +23,8 @@ export default function VideoToMp3Page() {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
 
-  const ffmpegRef = useRef(new FFmpeg());
+  // শুরুতে null থাকবে যাতে Node.js সার্ভার বিল্ডের সময় ক্র্যাশ না করে
+  const ffmpegRef = useRef(null);
 
   const handleFileSelect = (file) => {
     if (file && file.type.startsWith("video/")) {
@@ -44,6 +45,14 @@ export default function VideoToMp3Page() {
   };
 
   const loadFFmpeg = async () => {
+    // শুধু ব্রাউজারেই ডাইনামিকালি লাইব্রেরি লোড হবে
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+    const { toBlobURL } = await import("@ffmpeg/util");
+
+    if (!ffmpegRef.current) {
+      ffmpegRef.current = new FFmpeg();
+    }
+
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("progress", ({ progress }) => {
       setProgress(Math.round(progress * 100));
@@ -69,8 +78,12 @@ export default function VideoToMp3Page() {
     setStatusText("Starting conversion...");
 
     try {
+      if (!loaded || !ffmpegRef.current) {
+        await loadFFmpeg();
+      }
+
+      const { fetchFile } = await import("@ffmpeg/util");
       const ffmpeg = ffmpegRef.current;
-      if (!loaded) await loadFFmpeg();
 
       setStatusText("Processing media file...");
       const fileData = await fetchFile(videoFile);
@@ -100,13 +113,10 @@ export default function VideoToMp3Page() {
 
   return (
     <main className="relative min-h-dvh bg-[#0B0F19] text-slate-100 flex items-center justify-center p-3.5 sm:p-6 md:p-8 overflow-hidden font-sans">
-      {/* Background Aurora */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-125 sm:h-125 bg-indigo-600/15 rounded-full blur-[90px] sm:blur-[130px] pointer-events-none" />
       <div className="absolute bottom-5 right-5 w-48 h-48 sm:w-75 sm:h-75 bg-emerald-600/10 rounded-full blur-[80px] sm:blur-[110px] pointer-events-none" />
 
-      {/* Main Glass Card */}
       <div className="relative w-full max-w-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800/90 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-2xl my-auto">
-        {/* Header */}
         <div className="flex flex-col items-center text-center mb-6 sm:mb-8">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] sm:text-xs font-medium uppercase tracking-wider mb-2.5">
             <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -121,14 +131,12 @@ export default function VideoToMp3Page() {
           </p>
         </div>
 
-        {/* Upload / File Card */}
         {!videoFile ? (
           <Dropzone onFileSelect={handleFileSelect} />
         ) : (
           <FileCard file={videoFile} onRemove={resetAll} disabled={loading} />
         )}
 
-        {/* Convert Button */}
         {videoFile && !audioUrl && (
           <button
             onClick={convertToMp3}
@@ -149,7 +157,6 @@ export default function VideoToMp3Page() {
           </button>
         )}
 
-        {/* Progress Bar */}
         {loading && (
           <div className="mt-4 sm:mt-6 space-y-1.5 sm:space-y-2">
             <div className="flex justify-between items-center text-[11px] sm:text-xs text-slate-400 font-mono">
@@ -167,7 +174,6 @@ export default function VideoToMp3Page() {
           </div>
         )}
 
-        {/* Audio Result & Download */}
         {audioUrl && (
           <ResultCard
             audioUrl={audioUrl}
@@ -176,7 +182,6 @@ export default function VideoToMp3Page() {
           />
         )}
 
-        {/* Status / Alert */}
         {statusText && !loading && !audioUrl && (
           <div className="mt-3 sm:mt-4 flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-slate-400 justify-center text-center px-2">
             <AlertCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
@@ -184,7 +189,6 @@ export default function VideoToMp3Page() {
           </div>
         )}
 
-        {/* Security Badge */}
         <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-slate-800/80 flex items-center justify-center gap-1.5 sm:gap-2 text-slate-500 text-[11px] sm:text-xs text-center">
           <ShieldCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
           <span>Files stay on your device • 100% Private</span>
