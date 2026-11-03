@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "app/tools/digital-clock/page.tsx", "app/tools/calculator/components/Button.jsx", "app/tools/calculator/page.jsx", "app/tools/random-quote/page.jsx", "app/page.jsx"  ],
   "exclude": ["node_modules"]
 }
