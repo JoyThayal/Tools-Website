@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large AI models and binaries
+public/models/
+bin/
+*.onnx
+*.exe

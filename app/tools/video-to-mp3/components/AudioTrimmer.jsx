@@ -12,70 +12,83 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
   const [trimming, setTrimming] = useState(false);
   const [trimmedUrl, setTrimmedUrl] = useState(null);
 
+  // ইনপুট বক্সের টেক্সট স্টেট (MM:SS হিসেবে রাখার জন্য)
+  const [startInputText, setStartInputText] = useState("00:00");
+  const [endInputText, setEndInputText] = useState("00:30");
+
   const audioRef = useRef(null);
 
-  // অডিওর সঠিক মোট সময় বের করা
+  // সেকেন্ড থেকে MM:SS ফরম্যাটে রূপান্তর
+  const formatToTimeStr = (secs) => {
+    const safeSecs = Math.max(0, isNaN(secs) ? 0 : secs);
+    const m = Math.floor(safeSecs / 60);
+    const s = Math.floor(safeSecs % 60);
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // MM:SS বা সাধারণ নাম্বার থেকে সেকেন্ডে রূপান্তর
+  const parseTimeToSeconds = (str) => {
+    if (!str || typeof str !== "string") return 0;
+    const cleanStr = str.trim();
+    if (cleanStr.includes(":")) {
+      const parts = cleanStr.split(":");
+      const mins = parseFloat(parts[0]) || 0;
+      const secs = parseFloat(parts[1]) || 0;
+      return mins * 60 + secs;
+    }
+    return parseFloat(cleanStr) || 0;
+  };
+
+  // অডিও লোড হলে মোট সময় সেট করা
   useEffect(() => {
     if (audioUrl) {
       const audio = new Audio(audioUrl);
       audio.onloadedmetadata = () => {
         const d = Number(audio.duration.toFixed(2)) || 60;
+        const initialEnd = Math.min(30, d);
         setDuration(d);
         setStartTime(0);
-        setEndTime(Math.min(30, d));
+        setEndTime(initialEnd);
+        setStartInputText("00:00");
+        setEndInputText(formatToTimeStr(initialEnd));
       };
     }
   }, [audioUrl]);
 
-  // মিলি-সেকেন্ড সহ সময় ফরম্যাট (MM:SS.s)
-  const formatTime = (secs) => {
-    const safeSecs = Math.max(0, isNaN(secs) ? 0 : secs);
-    const m = Math.floor(safeSecs / 60);
-    const s = Math.floor(safeSecs % 60);
-    const ms = Math.floor((safeSecs % 1) * 10);
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
+  // স্লাইডার নাড়ালে ইনপুট বক্সের লেখা আপডেট করা
+  const updateStartTimeFromSlider = (val) => {
+    setStartTime(val);
+    setStartInputText(formatToTimeStr(val));
   };
 
-  // ইনপুট হ্যান্ডলার - Start Time সরাসরি লিখলে
-  const handleStartInputChange = (val) => {
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      const clamped = Math.max(0, Math.min(num, endTime - 0.2));
-      setStartTime(Number(clamped.toFixed(2)));
-    } else if (val === "") {
-      setStartTime(0);
-    }
+  const updateEndTimeFromSlider = (val) => {
+    setEndTime(val);
+    setEndInputText(formatToTimeStr(val));
   };
 
-  // End Input পরিবর্তন হ্যান্ডলার
-  const handleEndInputChange = (val) => {
-    if (val === "") {
-      setEndTime(""); // ব্যাকস্পেস দিলে যাতে বক্সটি সম্পূর্ণ ফাঁকা হতে পারে
-      return;
-    }
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      setEndTime(num);
-    }
+  // Start Input ফোকাস হারালে (onBlur) ভ্যালিডেশন
+  const handleStartBlur = () => {
+    const parsedSecs = parseTimeToSeconds(startInputText);
+    const maxAllowed = Math.max(0, endTime - 1);
+    const safeSecs = Math.min(Math.max(0, parsedSecs), maxAllowed);
+
+    setStartTime(safeSecs);
+    setStartInputText(formatToTimeStr(safeSecs));
   };
 
-  // বক্সের বাইরে ক্লিক করলে (onBlur) কমপক্ষে start-এর ১ সেকেন্ড পরে লক হবে
-  const handleEndInputBlur = () => {
-    const currentEnd =
-      typeof endTime === "number" ? endTime : parseFloat(endTime);
-    const minEnd = Number((startTime + 1).toFixed(2));
-    const maxEnd = duration || 60;
+  // End Input ফোকাস হারালে (onBlur) ভ্যালিডেশন
+  const handleEndBlur = () => {
+    const parsedSecs = parseTimeToSeconds(endInputText);
+    const minAllowed = startTime + 1;
+    const maxDuration = duration || 60;
+    let safeSecs = Math.max(minAllowed, parsedSecs);
+    if (safeSecs > maxDuration) safeSecs = maxDuration;
 
-    if (isNaN(currentEnd) || currentEnd < minEnd) {
-      setEndTime(Math.min(minEnd, maxEnd));
-    } else if (currentEnd > maxEnd) {
-      setEndTime(maxEnd);
-    } else {
-      setEndTime(Number(currentEnd.toFixed(2)));
-    }
+    setEndTime(safeSecs);
+    setEndInputText(formatToTimeStr(safeSecs));
   };
 
-  // সিলেক্ট করা অংশটুকু প্লে করা
+  // অডিও প্রিভিউ প্লে করা
   const handlePreview = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -88,7 +101,6 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
     }
   };
 
-  // অডিও চলতে চলতে endTime এ পৌঁছালে পজ হওয়া
   const handleTimeUpdate = () => {
     if (audioRef.current && audioRef.current.currentTime >= endTime) {
       audioRef.current.pause();
@@ -108,7 +120,6 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
       const fileData = await fetchFile(audioUrl);
       await ffmpeg.writeFile("to_cut.mp3", fileData);
 
-      // নিখুঁত কাটার জন্য কপি মোড
       await ffmpeg.exec([
         "-i",
         "to_cut.mp3",
@@ -131,6 +142,8 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
     }
   };
 
+  const currentLength = Math.max(0, endTime - startTime).toFixed(1);
+
   return (
     <div className="mt-3.5 sm:mt-4 pt-3 border-t border-slate-800/80">
       <audio
@@ -151,11 +164,11 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
         </button>
       ) : (
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 space-y-3.5">
-          {/* Top Header */}
+          {/* Header */}
           <div className="flex items-center justify-between text-xs sm:text-sm">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
               <Scissors className="w-3.5 h-3.5 text-indigo-400" />
-              Trim by Slider or Typing
+              Trim Audio (MM:SS)
             </span>
             <button
               onClick={() => setIsOpen(false)}
@@ -165,96 +178,105 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
             </button>
           </div>
 
-          {/* Time Display Badge */}
-          <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/70 rounded-lg p-2 text-[10px] sm:text-xs font-mono text-slate-400">
-            <div>
-              Start:{" "}
-              <b className="text-indigo-400 font-bold">
-                {formatTime(startTime)}
-              </b>
+          {/* MM:SS Time Inputs Badge */}
+          <div className="grid grid-cols-3 items-center bg-slate-900/80 border border-slate-800/80 rounded-xl p-2 gap-2 text-center">
+            {/* Start Field */}
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-medium mb-1">
+                Start
+              </span>
+              <input
+                type="text"
+                value={startInputText}
+                placeholder="00:00"
+                onChange={(e) => setStartInputText(e.target.value)}
+                onBlur={handleStartBlur}
+                className="w-18 bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-lg px-2 py-1 text-center font-mono text-xs sm:text-sm font-bold text-indigo-400 outline-none transition shadow-inner"
+              />
             </div>
-            <div className="text-slate-200 bg-slate-800/80 px-2 py-0.5 rounded text-[10px] sm:text-xs font-semibold">
-              Length: {(endTime - startTime).toFixed(1)}s
-            </div>
-            <div>
-              End:{" "}
-              <b className="text-indigo-400 font-bold">{formatTime(endTime)}</b>
-            </div>
-          </div>
 
-          {/* Start Point Slider & Editable Box */}
-          <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-medium">Start Position</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-500">Edit (sec):</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max={(duration || 60).toString()}
-                  value={startTime === 0 ? "" : startTime}
-                  placeholder="0"
-                  onChange={(e) => handleStartInputChange(e.target.value)}
-                  className="w-16 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded px-1.5 py-0.5 text-right font-mono text-xs text-indigo-300 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+            {/* Total Length */}
+            <div className="flex flex-col items-center justify-center border-x border-slate-800/80 px-1">
+              <span className="text-[10px] text-slate-400 font-medium mb-1">
+                Length
+              </span>
+              <div className="text-slate-200 font-mono text-xs sm:text-sm font-semibold bg-slate-800/80 px-2.5 py-1 rounded-lg">
+                {currentLength}s
               </div>
             </div>
-            <div className="h-6 flex items-center">
+
+            {/* End Field */}
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-medium mb-1">
+                End
+              </span>
               <input
-                type="range"
-                min="0"
-                max={duration || 60}
-                step="0.05"
-                value={typeof startTime === "number" ? startTime : 0}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  const currentEnd =
-                    typeof endTime === "number" ? endTime : duration || 60;
-                  if (val <= currentEnd - 1)
-                    setStartTime(Number(val.toFixed(2)));
-                }}
-                className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer touch-pan-x"
+                type="text"
+                value={endInputText}
+                placeholder="00:30"
+                onChange={(e) => setEndInputText(e.target.value)}
+                onBlur={handleEndBlur}
+                className="w-18 bg-slate-950 border border-slate-700/80 focus:border-indigo-500 rounded-lg px-2 py-1 text-center font-mono text-xs sm:text-sm font-bold text-indigo-400 outline-none transition shadow-inner"
               />
             </div>
           </div>
 
-          {/* End Point Slider & Editable Box */}
-          <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-medium">End Position</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-500">Edit (sec):</span>
+          {/* Sliders Container */}
+          <div className="space-y-3 bg-slate-900/40 border border-slate-800/50 rounded-xl p-3">
+            {/* Start Slider */}
+            <div>
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium mb-1">
+                <span>Start Point</span>
+                <span className="font-mono text-indigo-400">
+                  {formatToTimeStr(startTime)}
+                </span>
+              </div>
+              <div className="h-5 flex items-center">
                 <input
-                  type="number"
-                  step="0.1"
+                  type="range"
                   min="0"
-                  max={(duration || 60).toString()}
+                  max={duration || 60}
+                  step="0.05"
+                  value={startTime}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (val <= endTime - 1) {
+                      updateStartTimeFromSlider(Number(val.toFixed(2)));
+                    }
+                  }}
+                  className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer touch-pan-x"
+                />
+              </div>
+            </div>
+
+            {/* End Slider */}
+            <div>
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium mb-1">
+                <span>End Point</span>
+                <span className="font-mono text-indigo-400">
+                  {formatToTimeStr(endTime)}
+                </span>
+              </div>
+              <div className="h-5 flex items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max={duration || 60}
+                  step="0.05"
                   value={endTime}
-                  placeholder={(startTime + 1).toFixed(1)}
-                  onChange={(e) => handleEndInputChange(e.target.value)}
-                  onBlur={handleEndInputBlur}
-                  className="w-16 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded px-1.5 py-0.5 text-right font-mono text-xs text-indigo-300 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (val >= startTime + 1) {
+                      updateEndTimeFromSlider(Number(val.toFixed(2)));
+                    }
+                  }}
+                  className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer touch-pan-x"
                 />
               </div>
             </div>
-            <div className="h-6 flex items-center">
-              <input
-                type="range"
-                min="0"
-                max={duration || 60}
-                step="0.05"
-                value={typeof endTime === "number" ? endTime : startTime + 1}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  if (val >= startTime + 1) setEndTime(Number(val.toFixed(2)));
-                }}
-                className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer touch-pan-x"
-              />
-            </div>
           </div>
 
-          {/* Preview & Cut Actions */}
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
             <button
               onClick={handlePreview}
@@ -265,7 +287,7 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
               ) : (
                 <Play className="w-3.5 h-3.5 text-emerald-400" />
               )}
-              <span>{isPlaying ? "Pause Preview" : "Play Selection"}</span>
+              <span>{isPlaying ? "Pause Preview" : "Play Preview"}</span>
             </button>
 
             <button
@@ -282,7 +304,7 @@ export default function AudioTrimmer({ audioUrl, fileName, ffmpegRef }) {
             </button>
           </div>
 
-          {/* Download Final Output */}
+          {/* Download Output */}
           {trimmedUrl && (
             <div className="pt-2.5 border-t border-slate-800/80">
               <a
