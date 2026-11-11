@@ -25,7 +25,7 @@ export const toolsData = [
   },
   {
     title: "AI Background Remover",
-    desc: "Instant client-side cutout with custom backdrop colors",
+    desc: "Remove background from images",
     href: "/tools/bg-remover",
     image: "/images/bg-remover.webp",
   },

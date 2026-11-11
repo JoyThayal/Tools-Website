@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -12,9 +13,11 @@ export async function GET(request) {
     return NextResponse.json({ error: "URL is required" }, { status: 400 });
   }
 
-  const binaryPath = path.join(process.cwd(), "bin", "yt-dlp.exe");
+  const isWindows = process.platform === "win32";
+  const binaryFileName = isWindows ? "yt-dlp.exe" : "yt-dlp";
+  const localBinary = path.join(process.cwd(), "bin", binaryFileName);
+  const executable = fs.existsSync(localBinary) ? localBinary : "yt-dlp";
 
-  // অডিও এবং ভিডিও ফরম্যাট আর্গুমেন্ট হ্যান্ডেল করা
   const args = [
     "-f",
     type === "audio" ? "bestaudio" : `${formatId}+bestaudio/best`,
@@ -23,7 +26,7 @@ export async function GET(request) {
     videoUrl,
   ];
 
-  const ytDlpProcess = spawn(binaryPath, args);
+  const ytDlpProcess = spawn(executable, args);
 
   const stream = new ReadableStream({
     start(controller) {

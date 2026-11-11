@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { create } from "yt-dlp-exec";
 import path from "path";
+import fs from "fs";
 
-const binaryPath = path.join(process.cwd(), "bin", "yt-dlp.exe");
-const customYtDlp = create(binaryPath);
+// OS অনুযায়ী সঠিক পাথ চেনা
+const isWindows = process.platform === "win32";
+const binaryFileName = isWindows ? "yt-dlp.exe" : "yt-dlp";
+const binaryPath = path.join(process.cwd(), "bin", binaryFileName);
 
-// বাইট থেকে MB-তে কনভার্ট করার ফাংশন
+// যদি bin ফোল্ডারে ফাইল থাকে তবে সেটা নেবে, না হলে গ্লোবাল রানার
+const customYtDlp = fs.existsSync(binaryPath)
+  ? create(binaryPath)
+  : create("yt-dlp");
+
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return "Unknown size";
   const mb = bytes / (1024 * 1024);
@@ -26,17 +33,14 @@ export async function POST(request) {
       noWarnings: true,
     });
 
-    // সব কোয়ালিটি ফিল্টার করা
     const formatsMap = new Map();
 
     if (info.formats && Array.isArray(info.formats)) {
       info.formats.forEach((f) => {
-        // শুধু ভিডিও ফাইল (যেগুলোর হাইট আছে)
         if (f.height && f.ext === "mp4") {
           const resolution = `${f.height}p`;
           const size = f.filesize || f.filesize_approx;
 
-          // ডুপ্লিকেট বাদ দিয়ে সেরা ফরম্যাটটি রাখা
           if (
             !formatsMap.has(resolution) ||
             (size && !formatsMap.get(resolution).filesize)
@@ -53,15 +57,14 @@ export async function POST(request) {
       });
     }
 
-    // একটি অডিও (MP3/M4A) অপশন যোগ করা
     const audioFormats = info.formats?.filter(
       (f) => f.vcodec === "none" && (f.filesize || f.filesize_approx),
     );
     const bestAudio = audioFormats?.[audioFormats.length - 1];
 
-    const qualities = Array.from(formatsMap.values()).sort((a, b) => {
-      return parseInt(b.quality) - parseInt(a.quality);
-    });
+    const qualities = Array.from(formatsMap.values()).sort(
+      (a, b) => parseInt(b.quality) - parseInt(a.quality),
+    );
 
     if (bestAudio) {
       qualities.push({
@@ -76,7 +79,7 @@ export async function POST(request) {
     return NextResponse.json({
       title: info.title || "Untitled Video",
       thumbnail: info.thumbnail || "",
-      qualities: qualities,
+      qualities,
     });
   } catch (error) {
     console.error("Fetch error:", error);
