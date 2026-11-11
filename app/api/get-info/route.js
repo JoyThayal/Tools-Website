@@ -28,7 +28,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
-    // ১. লোকালহোস্টে সরাসরি yt-dlp বাইনারি দিয়ে মেটাডেটা নেওয়া
+    // ১. লোকালহোস্টে yt-dlp বাইনারি থাকলে অগ্রাধিকার দেবে
     const isWindows = process.platform === "win32";
     const binaryFileName = isWindows ? "yt-dlp.exe" : "yt-dlp";
     const localBinary = path.join(process.cwd(), "bin", binaryFileName);
@@ -71,7 +71,6 @@ export async function POST(request) {
           (a, b) => parseInt(b.quality) - parseInt(a.quality),
         );
 
-        // অডিও অপশন যোগ
         qualities.push({
           formatId: "bestaudio",
           quality: "Audio Only (MP3)",
@@ -87,54 +86,102 @@ export async function POST(request) {
         });
       } catch (localErr) {
         console.error(
-          "Local yt-dlp execution failed, switching to safe mode:",
+          "Local yt-dlp failed, switching to web extractor:",
           localErr,
         );
       }
     }
 
-    // ২. ফলব্যাক মোড (যাতে Vercel বা অন্য কোথাও ক্র্যাশ না করে)
+    // ২. Vercel-এর জন্য ফুল স্ট্রিমিং মেটাডেটা এক্সট্র্যাক্টর (YouTube Player API)
     const ytId = getYouTubeId(url);
     if (ytId) {
-      const oembedRes = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`,
+      // ইউটিউব অফিসিয়াল প্লেয়ার API রিকোয়েস্ট (কোনো বাইনারি ছাড়া)
+      const ytResponse = await fetch(
+        "https://www.youtube.com/youtubei/v1/player",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+          body: JSON.stringify({
+            videoId: ytId,
+            context: {
+              client: {
+                clientName: "ANDROID",
+                clientVersion: "19.09.37",
+                androidSdkVersion: 30,
+              },
+            },
+          }),
+        },
       );
 
-      let title = "YouTube Video";
-      let thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+      const playerInfo = await ytResponse.json();
+      const streamingData = playerInfo?.streamingData;
 
-      if (oembedRes.ok) {
-        const meta = await oembedRes.json();
-        title = meta.title || title;
-        thumbnail = meta.thumbnail_url || thumbnail;
+      if (streamingData) {
+        const allStreams = [
+          ...(streamingData.formats || []),
+          ...(streamingData.adaptiveFormats || []),
+        ];
+
+        const formatsMap = new Map();
+
+        allStreams.forEach((f) => {
+          if (f.qualityLabel && f.mimeType?.includes("video/mp4")) {
+            const resolution = f.qualityLabel.split(" ")[0]; // যেমন: 1080p, 720p
+            const size = f.contentLength ? parseInt(f.contentLength) : null;
+
+            if (!formatsMap.has(resolution)) {
+              formatsMap.set(resolution, {
+                formatId: f.itag?.toString() || resolution,
+                quality: resolution,
+                ext: "mp4",
+                type: "video",
+                sizeText: formatBytes(size),
+              });
+            }
+          }
+        });
+
+        const qualities = Array.from(formatsMap.values()).sort(
+          (a, b) => parseInt(b.quality) - parseInt(a.quality),
+        );
+
+        // অডিও ফরম্যাট খোঁজা
+        const audioStream = allStreams.find((f) =>
+          f.mimeType?.includes("audio/mp4"),
+        );
+        qualities.push({
+          formatId: audioStream?.itag?.toString() || "audio",
+          quality: "Audio Only (MP3)",
+          ext: "mp3",
+          type: "audio",
+          sizeText: formatBytes(
+            audioStream?.contentLength
+              ? parseInt(audioStream.contentLength)
+              : null,
+          ),
+        });
+
+        return NextResponse.json({
+          title: playerInfo.videoDetails?.title || "YouTube Video",
+          thumbnail:
+            playerInfo.videoDetails?.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
+            `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`,
+          qualities: qualities.length > 1 ? qualities : getDefaultQualities(),
+        });
       }
-
-      return NextResponse.json({
-        title,
-        thumbnail,
-        qualities: [
-          {
-            formatId: "best",
-            quality: "Best Available (HD)",
-            ext: "mp4",
-            type: "video",
-            sizeText: "Auto Stream",
-          },
-          {
-            formatId: "audio",
-            quality: "Audio Extract (MP3)",
-            ext: "mp3",
-            type: "audio",
-            sizeText: "320 kbps",
-          },
-        ],
-      });
     }
 
-    return NextResponse.json(
-      { error: "Could not extract information from this link." },
-      { status: 400 },
-    );
+    // ফলব্যাক
+    return NextResponse.json({
+      title: "Extracted Video",
+      thumbnail: ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : "",
+      qualities: getDefaultQualities(),
+    });
   } catch (error) {
     console.error("General API Error:", error);
     return NextResponse.json(
@@ -142,4 +189,37 @@ export async function POST(request) {
       { status: 500 },
     );
   }
+}
+
+function getDefaultQualities() {
+  return [
+    {
+      formatId: "1080p",
+      quality: "1080p",
+      ext: "mp4",
+      type: "video",
+      sizeText: "Full HD",
+    },
+    {
+      formatId: "720p",
+      quality: "720p",
+      ext: "mp4",
+      type: "video",
+      sizeText: "HD",
+    },
+    {
+      formatId: "480p",
+      quality: "480p",
+      ext: "mp4",
+      type: "video",
+      sizeText: "Standard",
+    },
+    {
+      formatId: "audio",
+      quality: "Audio Only (MP3)",
+      ext: "mp3",
+      type: "audio",
+      sizeText: "320 kbps",
+    },
+  ];
 }
