@@ -14,6 +14,9 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+// Render-এর লাইভ ব্যাকএন্ড এন্ডপয়েন্ট
+const BACKEND_URL = "https://tools-downloader-backend.onrender.com";
+
 export default function VideoDownloaderPage() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +33,7 @@ export default function VideoDownloaderPage() {
     setVideoData(null);
 
     try {
-      const res = await fetch("/api/get-info", {
+      const res = await fetch(`${BACKEND_URL}/get-info`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url.trim() }),
@@ -52,7 +55,7 @@ export default function VideoDownloaderPage() {
 
   const handleDownload = (formatId, type) => {
     setDownloadingId(formatId);
-    const downloadEndpoint = `/api/download?url=${encodeURIComponent(
+    const downloadEndpoint = `${BACKEND_URL}/download?url=${encodeURIComponent(
       url,
     )}&formatId=${encodeURIComponent(formatId)}&type=${type}`;
 
@@ -157,7 +160,6 @@ export default function VideoDownloaderPage() {
           {/* মেটাডেটা ও কোয়ালিটি রেজাল্ট */}
           {videoData && !isLoading && (
             <div className="space-y-4 pt-1">
-              {/* প্রিভিউ কার্ড - সম্পূর্ণ ফ্লুইড ও ফ্লেক্সিবল */}
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-3 sm:p-4 bg-slate-950/60 rounded-2xl border border-slate-800 items-start sm:items-center">
                 {videoData.thumbnail && (
                   <div className="relative w-full sm:w-40 h-32 sm:h-24 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shrink-0 shadow-md">
@@ -193,7 +195,6 @@ export default function VideoDownloaderPage() {
                       key={idx}
                       className="flex items-center justify-between gap-2 p-2.5 sm:p-3 rounded-xl bg-slate-950/40 hover:bg-slate-900/60 border border-slate-800/60 hover:border-slate-700/80 transition-all"
                     >
-                      {/* লেফট সাইড: আইকন + কোয়ালিটি + ট্যাগ */}
                       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                         <div
                           className={`w-7 h-7 rounded-lg flex items-center justify-center border shrink-0 ${
@@ -219,7 +220,6 @@ export default function VideoDownloaderPage() {
                         </div>
                       </div>
 
-                      {/* রাইট সাইড: সাইজ ও গেট বাটন */}
                       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                         <span className="text-[11px] sm:text-xs font-mono text-slate-400 whitespace-nowrap">
                           {q.sizeText}
